@@ -16,30 +16,11 @@ const gl = @cImport({
     }
 });
 
-const vertex_shader_source: [*c]const u8 =
-    \\#version 330 core
-    \\layout (location = 0) in vec3 aPos;
-    \\void main() {
-    \\    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
-    \\}
-;
-
-const fragment_shader_source: [*c]const u8 =
-    \\#version 330 core
-    \\out vec4 FragColor;
-    \\void main() {
-    \\    FragColor = vec4(1.0, 0.0, 0.0, 1.0); // Rot
-    \\}
-;
-
-const vertices = [_]f32{
-    -0.5, -0.5, 0.0, // Links unten
-    0.5, -0.5, 0.0, // Rechts unten
-    0.0, 0.5, 0.0, // Oben mitte
-};
+var mouse_pos: MousePosition = undefined;
 
 fn cursorPosCallback(_: ?*glfw.GLFWwindow, xpos: f64, ypos: f64) callconv(.C) void {
     std.debug.print("Mausposition: X={d:.1}, Y={d:.1}\n", .{ xpos, ypos });
+    mouse_pos = MousePosition{ .x = xpos, .y = ypos };
 }
 
 fn mouseButtonCallback(window: ?*glfw.GLFWwindow, button: c_int, action: c_int, _: c_int) callconv(.C) void {
@@ -111,6 +92,67 @@ fn checkGLError(location: []const u8) void {
         std.debug.print("OpenGL Fehler bei {s}: 0x{X}\n", .{ location, err });
     }
 }
+
+const Cursor = struct {
+    x: i32 = 0,
+    y: i32 = 0,
+};
+
+const Color = struct {
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+};
+
+const MousePosition = struct {
+    x: f64,
+    y: f64,
+};
+
+const Rect = struct {
+    pos_x: i32,
+    pos_y: i32,
+    width: i32,
+    height: i32,
+    color: Color,
+
+    fn init(cursor: *Cursor, width: i32, height: i32, color: Color) Rect {
+        defer cursor.y += height;
+        return Rect{
+            .pos_x = cursor.x,
+            .pos_y = cursor.y,
+            .width = width,
+            .height = height,
+            .color = color,
+        };
+    }
+
+    fn input(self: *Rect, pos: MousePosition) void {
+        const mouse_pos_y: i32 = @intFromFloat(pos.y);
+        const mouse_pos_x: i32 = @intFromFloat(pos.x);
+        if (mouse_pos_x > self.pos_x and mouse_pos_x < self.pos_x + self.width and
+            mouse_pos_y > self.pos_y and mouse_pos_y < self.pos_y + self.height)
+        {
+            self.color.r += 1.0;
+        }
+    }
+
+    fn render(self: *Rect, window_height: i32) void {
+        // gl.glBegin(gl.GL_QUADS);
+        // gl.glColor4f(self.color.r, self.color.g, self.color.b, self.color.a);
+        // gl.glVertex2i(self.pos_x, self.pos_y);
+        // gl.glVertex2i(self.pos_x + self.width, self.pos_y);
+        // gl.glVertex2i(self.pos_x + self.width, self.pos_y + self.height);
+        // gl.glVertex2i(self.pos_x, self.pos_y + self.height);
+        // gl.glEnd();
+
+        gl.glScissor(self.pos_x, window_height - self.pos_y - self.height, self.width, self.height);
+        gl.glViewport(self.pos_x, window_height - self.pos_y - self.height, self.width, self.height);
+        gl.glClearColor(self.color.r, self.color.g, self.color.b, self.color.a);
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT);
+    }
+};
 pub fn main() void {
     if (glfw.glfwInit() == 0) {
         std.debug.print("Failed to initialize GLFW\n", .{});
@@ -153,68 +195,47 @@ pub fn main() void {
     _ = glfw.glfwSetCursorPosCallback(window, cursorPosCallback);
     _ = glfw.glfwSetMouseButtonCallback(window, mouseButtonCallback);
     glfw.glfwSwapInterval(1);
-    const vertex_shader = compileShader(gl.GL_VERTEX_SHADER, vertex_shader_source);
-    checkGLError("Nach Vertex Shader");
 
-    if (vertex_shader == 0) {
-        std.debug.print("Vertex Shader is 0", .{});
-        return;
-    }
-
-    const fragment_shader = compileShader(gl.GL_FRAGMENT_SHADER, fragment_shader_source);
-    if (fragment_shader == 0) {
-        std.debug.print("Fragment Shader is 0", .{});
-        return;
-    }
-    checkGLError("Nach Fragment Shader");
-
-    const program = gl.glCreateProgram();
-    gl.glAttachShader(program, vertex_shader);
-    gl.glAttachShader(program, fragment_shader);
-    gl.glLinkProgram(program);
-
-    // Errror handling
-    var program_success: c_int = undefined;
-    gl.glGetProgramiv(program, gl.GL_LINK_STATUS, &program_success);
-    if (program_success == 0) {
-        var info_log: [512]u8 = undefined;
-        gl.glGetProgramInfoLog(program, 512, null, &info_log);
-        std.debug.print("Shader-Programm Linking fehlgeschlagen: {s}\n", .{info_log});
-        return;
-    }
-
-    gl.glDeleteShader(vertex_shader);
-    gl.glDeleteShader(fragment_shader);
-
-    var vob: c_uint = undefined;
-    var vao: c_uint = undefined;
-    gl.glGenVertexArrays(1, &vao);
-    gl.glGenBuffers(1, &vob);
-    gl.glBindVertexArray(vao);
-    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vob);
-
-    gl.glBufferData(gl.GL_ARRAY_BUFFER, vertices.len, &vertices, gl.GL_STATIC_DRAW);
-    checkGLError("Nach Buffer Data");
-
-    gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, 3 * @sizeOf(f32), null);
-    gl.glEnableVertexAttribArray(0);
+    gl.glEnable(gl.GL_SCISSOR_TEST);
 
     while (glfw.glfwWindowShouldClose(window) == 0) {
+        var width: c_int = 0;
+        var height: c_int = 0;
+        glfw.glfwGetFramebufferSize(window, &width, &height);
+
+        gl.glScissor(0, 0, width, height);
+        gl.glViewport(0, 0, width, height);
         gl.glClearColor(1.0, 0.3, 0.3, 1.0);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
-        checkGLError("Nach Clear");
-
-        gl.glUseProgram(program);
-        checkGLError("Nach Use Program");
-
-        gl.glBindVertexArray(vao);
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3);
-        checkGLError("Nach Draw Arrays");
+        var cursor = Cursor{};
+        var rect1 = Rect.init(
+            &cursor,
+            300,
+            200,
+            .{
+                .r = 0.0,
+                .g = 0.0,
+                .b = 1.0,
+                .a = 1.0,
+            },
+        );
+        var rect2 = Rect.init(
+            &cursor,
+            200,
+            100,
+            .{
+                .r = 0.0,
+                .g = 1.0,
+                .b = 1.0,
+                .a = 1.0,
+            },
+        );
+        rect1.input(mouse_pos);
+        rect1.render(height);
+        rect2.input(mouse_pos);
+        rect2.render(height);
 
         glfw.glfwSwapBuffers(window);
         glfw.glfwPollEvents();
     }
-    gl.glDeleteVertexArrays(1, &vao);
-    gl.glDeleteBuffers(1, &vob);
-    gl.glDeleteProgram(program);
 }
