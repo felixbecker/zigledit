@@ -153,6 +153,12 @@ const Rect = struct {
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
     }
 };
+fn getWindowSize(window: ?*glfw.GLFWwindow) struct { usize, usize } {
+    var width: i32 = 0;
+    var height: i32 = 0;
+    glfw.glfwGetWindowSize(window, &width, &height);
+    return .{ @intCast(width), @intCast(height) };
+}
 pub fn main() void {
     if (glfw.glfwInit() == 0) {
         std.debug.print("Failed to initialize GLFW\n", .{});
@@ -160,15 +166,22 @@ pub fn main() void {
     }
     // Direkt nach glfwInit()
     glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3); // macOS unterstützt maximal 4.1
+    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
     glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
-    glfw.glfwWindowHint(glfw.GLFW_OPENGL_FORWARD_COMPAT, gl.GL_TRUE);
+    glfw.glfwWindowHint(glfw.GLFW_OPENGL_DEBUG_CONTEXT, 1);
+    glfw.glfwWindowHint(glfw.GLFW_SAMPLES, 4);
 
     defer glfw.glfwTerminate();
 
     _ = glfw.glfwSetErrorCallback(errorCallback);
 
-    const window = glfw.glfwCreateWindow(800, 600, "Hello, World", null, null);
+    const window = glfw.glfwCreateWindow(
+        800,
+        600,
+        "Hello, World",
+        null,
+        null,
+    );
     if (window == null) {
         std.debug.print("Failed to create GLFW window\n", .{});
         return;
@@ -199,41 +212,21 @@ pub fn main() void {
     gl.glEnable(gl.GL_SCISSOR_TEST);
 
     while (glfw.glfwWindowShouldClose(window) == 0) {
-        var width: c_int = 0;
-        var height: c_int = 0;
-        glfw.glfwGetFramebufferSize(window, &width, &height);
-
-        gl.glScissor(0, 0, width, height);
-        gl.glViewport(0, 0, width, height);
+        const width, const height = getWindowSize(window);
+        std.debug.print("Fenstergröße: {d}x{d}\n", .{ width, height });
+        gl.glScissor(0, 0, @intCast(width), @intCast(height));
+        gl.glViewport(0, 0, @intCast(width), @intCast(height));
         gl.glClearColor(1.0, 0.3, 0.3, 1.0);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
+
         var cursor = Cursor{};
-        var rect1 = Rect.init(
-            &cursor,
-            300,
-            200,
-            .{
-                .r = 0.0,
-                .g = 0.0,
-                .b = 1.0,
-                .a = 1.0,
-            },
-        );
-        var rect2 = Rect.init(
-            &cursor,
-            200,
-            100,
-            .{
-                .r = 0.0,
-                .g = 1.0,
-                .b = 1.0,
-                .a = 1.0,
-            },
-        );
-        rect1.input(mouse_pos);
-        rect1.render(height);
-        rect2.input(mouse_pos);
-        rect2.render(height);
+        var rect1 = Rect.init(&cursor, 200, 100, .{ .r = 0.0, .g = 0.0, .b = 1.0, .a = 1.0 });
+        var rect2 = Rect.init(&cursor, 200, 100, .{ .r = 0.0, .g = 1.0, .b = 1.0, .a = 1.0 });
+
+        // rect1.input(mouse_pos);
+        // rect2.input(mouse_pos);
+        rect1.render(@intCast(height));
+        rect2.render(@intCast(height));
 
         glfw.glfwSwapBuffers(window);
         glfw.glfwPollEvents();
