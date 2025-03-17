@@ -6,7 +6,7 @@ in
 
 pkgs.mkShell {
   buildInputs = with pkgs; [
-    zig
+    zig_0_13
     glfw
     libGL
     mesa
