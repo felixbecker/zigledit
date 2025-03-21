@@ -197,9 +197,11 @@ pub fn main() !void {
     gl.glEnable(gl.GL_SCISSOR_TEST);
 
     while (glfw.glfwWindowShouldClose(window) == 0) {
-        const width, const height = getWindowSize(window);
-        gl.glScissor(0, 0, @intCast(width), @intCast(height));
-        gl.glViewport(0, 0, @intCast(width), @intCast(height));
+        const w, const h = getWindowSize(window);
+        const width: i32 = @intCast(w);
+        const height: i32 = @intCast(h);
+        gl.glScissor(0, 0, width, height);
+        gl.glViewport(0, 0, width, height);
         gl.glClearColor(1.0, 0.3, 0.3, 1.0);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
 
@@ -219,8 +221,8 @@ pub fn main() !void {
 
         rect1.input(mouse_pos);
         rect2.input(mouse_pos);
-        rect1.render(@intCast(height));
-        rect2.render(@intCast(height));
+        rect1.render(height);
+        rect2.render(height);
 
         glfw.glfwSwapBuffers(window);
         glfw.glfwPollEvents();
